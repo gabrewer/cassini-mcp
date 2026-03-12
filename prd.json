@@ -34,7 +34,7 @@
       "id": "task-003",
       "title": "Additional tools: get_mission_timeline, get_targets",
       "type": "backend",
-      "description": "Implement two more tools: get_mission_timeline(year?) returning observation counts grouped by year, or monthly breakdown when a specific year is provided; get_targets() returning all distinct target names with observation counts sorted by count descending.",
+      "description": "Implement two more tools by adding to the same mcp/src/index.ts file that task-002 produces. Must run after task-002 is complete. get_mission_timeline(year?) returning observation counts grouped by year, or monthly breakdown when a specific year is provided; get_targets() returning all distinct target names with observation counts sorted by count descending.",
       "acceptanceCriteria": [
         "get_mission_timeline() returns one row per year with observation count",
         "get_mission_timeline(2005) returns monthly breakdown for 2005",

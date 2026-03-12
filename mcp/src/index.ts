@@ -145,6 +145,62 @@ server.registerTool(
   }
 );
 
+// ─── Tool: get_mission_timeline ───────────────────────────────────────────────
+
+server.registerTool(
+  "get_mission_timeline",
+  {
+    description:
+      "Returns Cassini observation activity over time. Without a year, returns total " +
+      "observation count per year for the whole mission. With a year, returns a monthly " +
+      "breakdown for that year.",
+    inputSchema: z.object({
+      year: z.number().optional().describe("Optional year (e.g. 2005) for monthly breakdown"),
+    }),
+  },
+  async ({ year }) => {
+    const rows = year
+      ? db
+          .prepare(
+            `SELECT substr(start_time_utc, 6, 2) AS month, COUNT(*) AS observation_count ` +
+            `FROM master_plan WHERE substr(start_time_utc, 1, 4) = ? ` +
+            `GROUP BY month ORDER BY month`
+          )
+          .all(String(year))
+      : db
+          .prepare(
+            `SELECT substr(start_time_utc, 1, 4) AS year, COUNT(*) AS observation_count ` +
+            `FROM master_plan GROUP BY year ORDER BY year`
+          )
+          .all();
+
+    return { content: [{ type: "text", text: JSON.stringify(rows, null, 2) }] };
+  }
+);
+
+// ─── Tool: get_targets ────────────────────────────────────────────────────────
+
+server.registerTool(
+  "get_targets",
+  {
+    description:
+      "Returns all distinct observation targets in the Cassini master plan with their " +
+      "total observation counts, sorted by count descending. Useful for orientation and " +
+      "understanding which bodies received the most scientific attention.",
+    inputSchema: z.object({}),
+  },
+  async () => {
+    const rows = db
+      .prepare(
+        `SELECT target, COUNT(*) AS observation_count ` +
+        `FROM master_plan GROUP BY target ORDER BY observation_count DESC`
+      )
+      .all();
+
+    return { content: [{ type: "text", text: JSON.stringify(rows, null, 2) }] };
+  }
+);
+
 // Connect over stdio — this keeps the process alive waiting for JSON-RPC messages
 const transport = new StdioServerTransport();
 
