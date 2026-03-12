@@ -46,6 +46,7 @@ interface ExecutionPlan {
 
 export async function runCommand(argv: string[]): Promise<void> {
   const resume = argv.includes('--resume')
+  const yes = argv.includes('--yes')
 
   const branchFlagIdx = argv.indexOf('--branch')
   const branchFlag = branchFlagIdx !== -1 ? argv[branchFlagIdx + 1] : undefined
@@ -95,25 +96,28 @@ export async function runCommand(argv: string[]): Promise<void> {
   let plan = await runPlanSpinner(pendingTasks)
   let waves = buildWaves(pendingTasks, plan.dependencies)
 
-  while (true) {
-    printPlan(waves, plan.reasoning)
+  printPlan(waves, plan.reasoning)
 
-    const answer = await p.text({
-      message: 'Proceed with this plan?',
-      placeholder: 'enter to confirm, or describe changes…',
-    })
+  if (!yes) {
+    while (true) {
+      const answer = await p.text({
+        message: 'Proceed with this plan?',
+        placeholder: 'enter to confirm, or describe changes…',
+      })
 
-    if (p.isCancel(answer)) {
-      p.cancel('Cancelled.')
-      process.exit(0)
+      if (p.isCancel(answer)) {
+        p.cancel('Cancelled.')
+        process.exit(0)
+      }
+
+      const feedback = typeof answer === 'string' ? answer.trim() : ''
+      if (!feedback) break  // confirmed — proceed
+
+      plan = await runPlanSpinner(pendingTasks, feedback)
+      waves = buildWaves(pendingTasks, plan.dependencies)
+      printPlan(waves, plan.reasoning)
+      // loop back to show revised plan and prompt again
     }
-
-    const feedback = typeof answer === 'string' ? answer.trim() : ''
-    if (!feedback) break  // confirmed — proceed
-
-    plan = await runPlanSpinner(pendingTasks, feedback)
-    waves = buildWaves(pendingTasks, plan.dependencies)
-    // loop back to show revised plan and prompt again
   }
 
   console.log('')
@@ -680,32 +684,6 @@ async function getCurrentBranch(): Promise<string> {
   const text = await new Response(proc.stdout).text()
   await proc.exited
   return text.trim() || 'main'
-}
-
-async function ensureSafeBranch(branch: string, branchFlag?: string): Promise<string> {
-  if (branch !== 'main' && branch !== 'master') return branch
-
-  if (branchFlag) {
-    console.log(c.muted(`  Using branch: ${branchFlag}`))
-    return branchFlag
-  }
-
-  console.log('')
-  console.log(c.warning(`  You're on ${c.bold(branch)}. The build loop should run on a feature branch.`))
-  console.log('')
-
-  const newBranch = await p.text({
-    message: 'Feature branch name',
-    placeholder: 'feature/sprint-1',
-    validate: (val) => (!val ? 'Branch name is required.' : undefined),
-  })
-
-  if (p.isCancel(newBranch)) {
-    p.cancel('Cancelled.')
-    process.exit(0)
-  }
-
-  return newBranch as string
 }
 
 async function ensureSafeBranch(branch: string, branchFlag?: string): Promise<string> {

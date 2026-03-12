@@ -45,7 +45,7 @@ export const box = {
   },
 }
 
-export const termWidth = () => process.stdout.columns ?? 80
+export const termWidth = () => process.stdout.columns || 80
 
 export function fixedWidth(str: string, len: number, pad = ' '): string {
   if (str.length > len) return str.slice(0, len - 1) + '…'
