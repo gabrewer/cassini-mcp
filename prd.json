@@ -1,0 +1,22 @@
+{
+  "sprint": "readme",
+  "description": "A setup guide for a side-by-side experiment: MCP server vs CLI tool for grounding an AI in the Cassini mission dataset. Opinionated setup, neutral conclusions — the reader draws their own.",
+  "createdAt": "2026-03-12",
+  "tasks": [
+    {
+      "id": "task-001",
+      "title": "Write README.md",
+      "type": "backend",
+      "description": "Write README.md at the project root framing the MCP vs CLI experiment. Cover: what the repo contains, what cassini.db is and why it makes a good test subject, setup instructions for both implementations, 3-5 example questions drawn from actual data (e.g. Enceladus flybys, moon summaries), and a 'how to compare' section. Brief agentloop mention. No declared winner. Link out for MCP internals.",
+      "acceptanceCriteria": [
+        "README.md exists at project root",
+        "Includes MCP vs CLI experiment framing as the hook",
+        "Explains cassini.db dataset (master_plan and planets tables, key fields)",
+        "Setup instructions for both MCP and CLI implementations",
+        "3-5 example questions using actual data from the database",
+        "Includes a how-to-compare section",
+        "File has more than 50 lines"
+      ]
+    }
+  ]
+}
