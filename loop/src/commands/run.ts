@@ -29,6 +29,56 @@ const PM: AgentName = 'pm'
 
 const MAX_REVIEW_ATTEMPTS = 6
 
+// --- GitHub issue tracking ---
+
+async function loadTaskIssues(): Promise<Record<string, number>> {
+  const file = Bun.file(path.join(process.cwd(), '.claude', 'task-issues.json'))
+  if (!(await file.exists())) return {}
+  try { return await file.json() } catch { return {} }
+}
+
+async function setIssueStatus(
+  issueNum: number,
+  emoji: '🏃' | '✋' | '✅',
+  checkOffItems = false,
+): Promise<void> {
+  try {
+    // Update title: strip existing leading emoji + space, prepend new one
+    const titleJson = await Bun.spawn(
+      ['gh', 'issue', 'view', String(issueNum), '--json', 'title'],
+      { stdout: 'pipe', stderr: 'pipe' },
+    )
+    const titleText = await new Response(titleJson.stdout).text()
+    await titleJson.exited
+    const current = (JSON.parse(titleText) as { title: string }).title
+    const stripped = current.replace(/^[\p{Emoji_Presentation}\p{Extended_Pictographic}]\s*/u, '')
+    await Bun.spawn(
+      ['gh', 'issue', 'edit', String(issueNum), '--title', `${emoji} ${stripped}`],
+      { stdout: 'pipe', stderr: 'pipe' },
+    ).exited
+
+    // Check off acceptance criteria checkboxes when done
+    if (checkOffItems) {
+      const bodyJson = await Bun.spawn(
+        ['gh', 'issue', 'view', String(issueNum), '--json', 'body'],
+        { stdout: 'pipe', stderr: 'pipe' },
+      )
+      const bodyText = await new Response(bodyJson.stdout).text()
+      await bodyJson.exited
+      const body = (JSON.parse(bodyText) as { body: string }).body
+      const checked = body.replace(/- \[ \]/g, '- [x]')
+      if (checked !== body) {
+        await Bun.spawn(
+          ['gh', 'issue', 'edit', String(issueNum), '--body', checked],
+          { stdout: 'pipe', stderr: 'pipe' },
+        ).exited
+      }
+    }
+  } catch {
+    // Non-fatal — issue tracking should never block the build
+  }
+}
+
 interface ActiveTaskDisplay {
   taskId: string
   agent: AgentName
@@ -138,11 +188,13 @@ export async function runCommand(argv: string[]): Promise<void> {
   const renderDashboard = () => buildDashboard(prd.sprint, state, prd.tasks, activeAgents, dashboard, waves, currentWave, plan.reasoning)
   dashboard.start(renderDashboard)
 
+  const taskIssues = await loadTaskIssues()
+
   // Execute waves in sequence. Tasks within each wave run in parallel.
   for (const wave of waves) {
     currentWave++
     await Promise.allSettled(
-      wave.map(task => runTask(state, task, activeAgents, enqueueSave))
+      wave.map(task => runTask(state, task, activeAgents, enqueueSave, taskIssues))
     )
   }
 
@@ -178,11 +230,14 @@ async function runTask(
   task: Task,
   activeAgents: Map<string, ActiveTaskDisplay>,
   enqueueSave: () => Promise<void>,
+  taskIssues: Record<string, number> = {},
 ): Promise<void> {
+  const issueNum = taskIssues[task.id]
   const ts = state.tasks[task.id]
   ts.status = 'testing'
   ts.startedAt = new Date().toISOString()
   enqueueSave()
+  if (issueNum) setIssueStatus(issueNum, '🏃')
 
   // test-writer always runs first, alone
   const twDisplay: ActiveTaskDisplay = {
@@ -253,6 +308,7 @@ async function runTask(
     ts.status = 'failed'
     ts.completedAt = new Date().toISOString()
     enqueueSave()
+    if (issueNum) setIssueStatus(issueNum, '✋')
     return
   }
 
@@ -269,6 +325,7 @@ async function runTask(
   ts.status = 'done'
   ts.completedAt = new Date().toISOString()
   enqueueSave()
+  if (issueNum) setIssueStatus(issueNum, '✅', true)
 }
 
 interface AgentResult {
