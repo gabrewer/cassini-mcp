@@ -112,7 +112,7 @@ export function getFlybys(target: string): FlybyResult {
     .query<DateRow, [string]>(
       `SELECT date
        FROM master_plan
-       WHERE request_name = 'ENTAR'
+       WHERE lower(title) LIKE '%targeted%flyby%'
          AND target = ?
        ORDER BY start_time_utc`
     )
