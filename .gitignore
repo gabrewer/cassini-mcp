@@ -1,0 +1,5 @@
+node_modules/
+.agentloop/
+*.Zone.Identifier
+bun.lock
+dist/
