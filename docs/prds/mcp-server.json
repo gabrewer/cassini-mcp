@@ -1,0 +1,46 @@
+{
+  "sprint": "mcp-server",
+  "description": "A focused MCP server exposing the Cassini mission database as 6 typed tools. Enables natural language questions about flybys, observations, instrument teams, and mission targets via Claude Desktop. This is the MCP half of the cassini-mcp comparison demo.",
+  "createdAt": "2026-03-12",
+  "tasks": [
+    {
+      "id": "task-001",
+      "title": "MCP server scaffolding",
+      "type": "backend",
+      "description": "Create the mcp/ directory with package.json (Bun project, @modelcontextprotocol/sdk dependency), tsconfig.json, and src/index.ts with MCP server initialisation, stdio transport, and a working SQLite database connection to ../cassini.db. Server must start cleanly with bun run dev.",
+      "acceptanceCriteria": [
+        "mcp/package.json exists with @modelcontextprotocol/sdk dependency",
+        "mcp/src/index.ts initialises an MCP server with stdio transport",
+        "Database connection opens ../cassini.db relative to mcp/",
+        "bun run dev from mcp/ starts without error",
+        "Server starts and stays running with no tools registered yet"
+      ]
+    },
+    {
+      "id": "task-002",
+      "title": "Core tools: get_flybys, get_observations, get_body_summary, get_team_stats",
+      "type": "backend",
+      "description": "Implement four tools: get_flybys(target) returning flyby count and dates using request_name = 'ENTAR'; get_observations(target?, team?, date_range?, limit?) returning filtered master_plan rows with full description field, default limit 50; get_body_summary(name) returning planet/moon facts from the planets table; get_team_stats() returning observation count and total duration per instrument team sorted by count descending. All queries must be parameterised.",
+      "acceptanceCriteria": [
+        "get_flybys('Enceladus') returns exactly 23 targeted flyby events",
+        "get_observations({ target: 'Titan' }) returns up to 50 rows with correct fields including full description",
+        "get_body_summary('Enceladus') returns radius_km, mass_kg, discoverer, notes",
+        "get_team_stats() returns all teams sorted by observation count descending",
+        "All tools have precise descriptions suitable for model tool selection",
+        "All queries use parameterised inputs with no string interpolation"
+      ]
+    },
+    {
+      "id": "task-003",
+      "title": "Additional tools: get_mission_timeline, get_targets",
+      "type": "backend",
+      "description": "Implement two more tools by adding to the same mcp/src/index.ts file that task-002 produces. Must run after task-002 is complete. get_mission_timeline(year?) returning observation counts grouped by year, or monthly breakdown when a specific year is provided; get_targets() returning all distinct target names with observation counts sorted by count descending.",
+      "acceptanceCriteria": [
+        "get_mission_timeline() returns one row per year with observation count",
+        "get_mission_timeline(2005) returns monthly breakdown for 2005",
+        "get_targets() returns all distinct targets with counts sorted descending",
+        "Saturn appears at the top of get_targets() results"
+      ]
+    }
+  ]
+}

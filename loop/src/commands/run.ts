@@ -51,9 +51,17 @@ export async function runCommand(argv: string[]): Promise<void> {
   const branchFlagIdx = argv.indexOf('--branch')
   const branchFlag = branchFlagIdx !== -1 ? argv[branchFlagIdx + 1] : undefined
 
+  const prdFlagIdx = argv.indexOf('--prd')
+  const prdFlag = prdFlagIdx !== -1 ? argv[prdFlagIdx + 1] : undefined
+
+  if (!prdFlag) {
+    console.error(c.error('Missing --prd <sprint-name>. Example: agentloop --prd mcp-server'))
+    process.exit(1)
+  }
+
   let prd
   try {
-    prd = await readPrd()
+    prd = await readPrd(prdFlag)
   } catch (err) {
     console.error(c.error(String(err instanceof Error ? err.message : err)))
     process.exit(1)

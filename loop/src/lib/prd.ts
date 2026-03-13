@@ -17,30 +17,30 @@ export interface Prd {
   tasks: Task[]
 }
 
-const prdPath = () => join(process.cwd(), 'prd.json')
+const prdPath = (sprint: string) => join(process.cwd(), 'docs', 'prds', `${sprint}.json`)
 
-export async function readPrd(): Promise<Prd> {
-  const path = prdPath()
+export async function readPrd(sprint: string): Promise<Prd> {
+  const path = prdPath(sprint)
   const file = Bun.file(path)
 
   if (!(await file.exists())) {
-    throw new Error(`No prd.json found at ${path}. Run 'agentloop design' to create one.`)
+    throw new Error(`No PRD found at ${path}. Expected docs/prds/${sprint}.json`)
   }
 
   try {
     const prd = await file.json() as Prd
     if (!prd.sprint || !prd.tasks || !Array.isArray(prd.tasks)) {
-      throw new Error('prd.json looks malformed — expected sprint and tasks fields.')
+      throw new Error(`${path} looks malformed — expected sprint and tasks fields.`)
     }
     return prd
   } catch (err) {
     if (err instanceof SyntaxError) {
-      throw new Error(`prd.json is not valid JSON: ${err.message}`)
+      throw new Error(`${path} is not valid JSON: ${err.message}`)
     }
     throw err
   }
 }
 
 export async function writePrd(prd: Prd): Promise<void> {
-  await Bun.write(prdPath(), JSON.stringify(prd, null, 2) + '\n')
+  await Bun.write(prdPath(prd.sprint), JSON.stringify(prd, null, 2) + '\n')
 }
