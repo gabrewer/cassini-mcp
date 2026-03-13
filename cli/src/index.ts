@@ -5,7 +5,18 @@
  *   bun run src/index.ts <question> [--llm anthropic|openai] [--pretty] [--help]
  */
 
-import { openDb } from "../../shared/db.ts";
+import {
+  openDb,
+  getFlybys,
+  getObservations,
+  getBodySummary,
+  getTeamStats,
+  getMissionTimeline,
+  getTargets,
+} from "../../shared/db.ts";
+import { AnthropicDriver } from "./drivers/anthropic.ts";
+import { OpenAIDriver } from "./drivers/openai.ts";
+import type { QueryIntent } from "./drivers/types.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -13,13 +24,20 @@ type LLMProvider = "anthropic" | "openai";
 
 const VALID_LLM_PROVIDERS: LLMProvider[] = ["anthropic", "openai"];
 
-/** Represents the parsed intent of a user question, ready for LLM routing. */
-export interface QueryIntent {
-  question: string;
-  llm: LLMProvider;
-  queryType: string;
-  filters: Record<string, string>;
-}
+const SCHEMA_CONTEXT = `
+Tables:
+  master_plan — Cassini observation schedule
+    columns: id, start_time_utc, duration, date, team, spass_type, target, request_name, title, description
+  planets — celestial body metadata
+    columns: id, name, type, parent_body, distance_from_sun_km, orbital_period_days, radius_km, mass_kg, discovered_date, discoverer, notes
+`.trim();
+
+// ── API key env var names ──────────────────────────────────────────────────────
+
+const API_KEY_VARS: Record<LLMProvider, string> = {
+  anthropic: "ANTHROPIC_API_KEY",
+  openai: "OPENAI_API_KEY",
+};
 
 // ── Arg parsing ────────────────────────────────────────────────────────────────
 
@@ -38,9 +56,9 @@ function parseArgs(argv: string[]): ParsedArgs {
 
   let question: string | null = null;
   let pretty = false;
-  let llm: LLMProvider = "anthropic";
   let help = false;
   let error: string | null = null;
+  let llmFromFlag: LLMProvider | null = null;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -56,7 +74,7 @@ function parseArgs(argv: string[]): ParsedArgs {
       } else if (!(VALID_LLM_PROVIDERS as string[]).includes(val)) {
         error = `Error: invalid --llm value '${val}'. Must be one of: ${VALID_LLM_PROVIDERS.join(", ")}`;
       } else {
-        llm = val as LLMProvider;
+        llmFromFlag = val as LLMProvider;
       }
     } else if (!arg.startsWith("--")) {
       // First bare positional argument is the question
@@ -64,6 +82,16 @@ function parseArgs(argv: string[]): ParsedArgs {
         question = arg;
       }
     }
+  }
+
+  // --llm flag takes highest priority; CASSINI_LLM env var overrides built-in default
+  let llm: LLMProvider = "anthropic";
+  const envLlm = process.env.CASSINI_LLM;
+  if (envLlm && (VALID_LLM_PROVIDERS as string[]).includes(envLlm)) {
+    llm = envLlm as LLMProvider;
+  }
+  if (llmFromFlag !== null) {
+    llm = llmFromFlag;
   }
 
   return { question, pretty, llm, help, error };
@@ -85,56 +113,65 @@ Options:
   --pretty           Pretty-print the output with formatting
   --help, -h         Print this help message and exit
 
+Environment:
+  CASSINI_LLM        Default LLM provider (overridden by --llm flag)
+  ANTHROPIC_API_KEY  Required when using the anthropic provider
+  OPENAI_API_KEY     Required when using the openai provider
+
 Examples:
   bun run src/index.ts "How many Enceladus flybys did Cassini perform?"
   bun run src/index.ts "Which team made the most observations?" --llm openai --pretty`
   );
 }
 
-// ── LLM routing stub ──────────────────────────────────────────────────────────
+// ── Query execution ────────────────────────────────────────────────────────────
 
 /**
- * Placeholder for the real LLM routing step.
- * Returns a hard-coded QueryIntent so the scaffold is runnable end-to-end.
+ * Dispatches a QueryIntent to the appropriate database query function.
+ * Returns the raw result (array of rows or a single object).
  */
-function routeToLLM(question: string, llm: LLMProvider): QueryIntent {
-  return {
-    question,
-    llm,
-    queryType: "general",
-    filters: {},
-  };
+export async function executeQueryIntent(intent: QueryIntent): Promise<unknown> {
+  switch (intent.type) {
+    case "get_flybys":
+      return getFlybys(intent.params.target);
+    case "get_observations":
+      return getObservations(intent.params);
+    case "get_body_summary":
+      return getBodySummary(intent.params.name);
+    case "get_team_stats":
+      return getTeamStats();
+    case "get_mission_timeline":
+      return intent.params.year !== undefined
+        ? getMissionTimeline(intent.params.year)
+        : getMissionTimeline();
+    case "get_targets":
+      return getTargets();
+  }
 }
 
 // ── Output formatting ─────────────────────────────────────────────────────────
 
-function formatOutput(intent: QueryIntent, pretty: boolean): string {
-  const stubAnswer = "[stub] Real answer would appear here once LLM routing is wired.";
-
+/**
+ * Formats query result data for display.
+ * pretty=false → compact JSON on one line.
+ * pretty=true  → indented JSON for human readability.
+ */
+export function formatResult(data: unknown, pretty: boolean): string {
   if (pretty) {
-    const divider = "─".repeat(50);
-    return [
-      `┌${divider}`,
-      `│  Question : ${intent.question}`,
-      `│  Provider : ${intent.llm}`,
-      `│  Type     : ${intent.queryType}`,
-      `├${divider}`,
-      `│  ${stubAnswer}`,
-      `└${divider}`,
-    ].join("\n");
+    return JSON.stringify(data, null, 2);
   }
+  return JSON.stringify(data);
+}
 
-  return JSON.stringify(
-    {
-      question: intent.question,
-      llm: intent.llm,
-      queryType: intent.queryType,
-      filters: intent.filters,
-      answer: stubAnswer,
-    },
-    null,
-    2
-  );
+// ── Error handling ─────────────────────────────────────────────────────────────
+
+/**
+ * Returns a user-friendly error message for routing or DB failures.
+ * Uses only err.message — never includes stack trace lines or file paths.
+ */
+export function handleRoutingError(err: unknown, question: string): string {
+  const message = err instanceof Error ? err.message : String(err);
+  return `Could not understand or answer your question: "${question}"\nError: ${message}`;
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -161,15 +198,48 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  // Verify DB connection is available before proceeding
+  // Validate API key before making any network calls
+  const apiKey = process.env[API_KEY_VARS[parsed.llm]] ?? null;
+  if (!apiKey) {
+    const varName = API_KEY_VARS[parsed.llm];
+    console.error(
+      `Error: ${varName} is not set. Please export ${varName} before running.`
+    );
+    process.exit(1);
+  }
+
+  // Verify DB is reachable before making any network calls
   const db = openDb();
   db.close();
 
-  const intent = routeToLLM(parsed.question, parsed.llm);
-  console.log(formatOutput(intent, parsed.pretty));
+  const driver =
+    parsed.llm === "anthropic"
+      ? new AnthropicDriver(apiKey)
+      : new OpenAIDriver(apiKey);
+
+  let intent: QueryIntent;
+  try {
+    intent = await driver.ask(parsed.question, SCHEMA_CONTEXT);
+  } catch (err) {
+    console.error(handleRoutingError(err, parsed.question));
+    process.exit(1);
+  }
+
+  let result: unknown;
+  try {
+    result = await executeQueryIntent(intent);
+  } catch (err) {
+    console.error(handleRoutingError(err, parsed.question));
+    process.exit(1);
+  }
+
+  console.log(formatResult(result, parsed.pretty));
 }
 
-main().catch((err: unknown) => {
-  console.error("Fatal error:", err);
-  process.exit(1);
-});
+if (import.meta.main) {
+  main().catch((err: unknown) => {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`Fatal error: ${message}`);
+    process.exit(1);
+  });
+}
