@@ -1,0 +1,81 @@
+{
+  "sprint": "cli",
+  "description": "A natural-language CLI for the Cassini mission database that routes questions through a configurable LLM to query cassini.db, plus shared DB extraction for both CLI and MCP server.",
+  "createdAt": "2026-03-12",
+  "tasks": [
+    {
+      "id": "task-001",
+      "title": "shared/db.ts — extract shared database logic",
+      "type": "backend",
+      "description": "Create shared/db.ts (and shared/types.ts if needed) exporting openDb(), the utcDateExpr SQL fragment, and typed query functions for all 6 operations: getFlybys, getObservations, getBodySummary, getTeamStats, getMissionTimeline, getTargets. Each function takes the same parameters as the corresponding MCP tool and returns typed results. All date filtering must use start_time_utc via utcDateExpr — never the date column. Include tests in shared/ that verify query results against cassini.db.",
+      "acceptanceCriteria": [
+        "shared/db.ts exists and exports openDb, utcDateExpr, and 6 query functions",
+        "openDb() connects to cassini.db at the project root",
+        "getFlybys('Enceladus') returns exactly 23 results",
+        "getObservations({ target: 'Titan' }) returns up to 50 rows by default",
+        "getTeamStats() returns rows sorted by observation count descending",
+        "getTargets() returns Saturn at the top",
+        "getMissionTimeline() returns one row per year; getMissionTimeline(2005) returns monthly breakdown",
+        "bun test shared/ exits 0 with all tests passing"
+      ]
+    },
+    {
+      "id": "task-002",
+      "title": "CLI scaffolding — package.json, arg parsing, entry point",
+      "type": "backend",
+      "description": "Create cli/package.json (Bun project), cli/tsconfig.json, and cli/src/index.ts. The entry point parses a positional question argument plus --pretty, --llm anthropic|openai, and --help flags. With --help it prints usage and exits 0. With no question it prints an error and exits 1. Import openDb from shared/db.ts to verify the DB connection works. Wire a placeholder for the LLM routing step (stub that returns a hard-coded QueryIntent) so the scaffold is runnable end-to-end.",
+      "acceptanceCriteria": [
+        "cli/package.json exists with a dev script",
+        "bun run cli/src/index.ts --help prints usage and exits 0",
+        "bun run cli/src/index.ts (no args) prints an error message and exits 1",
+        "bun run cli/src/index.ts \"test question\" runs without crashing (stub response is fine)",
+        "--pretty flag is parsed and changes output formatting",
+        "--llm flag accepts anthropic or openai and rejects other values"
+      ]
+    },
+    {
+      "id": "task-003",
+      "title": "LLM drivers — Anthropic and OpenAI implementations",
+      "type": "backend",
+      "description": "Create cli/src/drivers/types.ts defining the LlmDriver interface: a single method that takes a question string and schema context, returns a QueryIntent. Create cli/src/drivers/anthropic.ts and cli/src/drivers/openai.ts implementing the interface. Each driver calls its respective API with a system prompt including database schema and the 6 valid intent types, asks the model to return a JSON QueryIntent, and parses the response. The QueryIntent type is a discriminated union with type matching one of the 6 tool names and params matching that tool's parameters. Must run after task-002.",
+      "acceptanceCriteria": [
+        "cli/src/drivers/types.ts exports LlmDriver interface and QueryIntent discriminated union type",
+        "QueryIntent has exactly 6 variants matching the MCP tool names: get_flybys, get_observations, get_body_summary, get_team_stats, get_mission_timeline, get_targets",
+        "cli/src/drivers/anthropic.ts exports a class implementing LlmDriver",
+        "cli/src/drivers/openai.ts exports a class implementing LlmDriver",
+        "Both drivers include database schema context in the system prompt",
+        "Both drivers parse the LLM response into a typed QueryIntent or throw a descriptive error",
+        "bunx tsc --noEmit from cli/ exits 0"
+      ]
+    },
+    {
+      "id": "task-004",
+      "title": "Query routing and execution — wire LLM to DB",
+      "type": "backend",
+      "description": "Replace the stub in cli/src/index.ts with real routing: select the LLM driver based on --llm flag or CASSINI_LLM env var (default: anthropic), call the driver with the user's question, receive a QueryIntent, execute the matching query function from shared/db.ts, and print the result as JSON (or pretty-printed with --pretty). Handle errors gracefully: missing API key → clear message with env var name; unknown intent → user-friendly message echoing the original question; DB errors → message without stack trace. Must run after task-001, task-002, and task-003.",
+      "acceptanceCriteria": [
+        "Running cassini-cli with a valid API key and a flyby question returns JSON containing 23 flybys",
+        "--pretty flag produces human-readable output instead of raw JSON",
+        "Missing ANTHROPIC_API_KEY when using --llm anthropic prints a message mentioning ANTHROPIC_API_KEY and exits 1",
+        "Missing OPENAI_API_KEY when using --llm openai prints a message mentioning OPENAI_API_KEY and exits 1",
+        "CASSINI_LLM=openai env var selects the OpenAI driver without needing --llm flag",
+        "--llm flag overrides the CASSINI_LLM env var",
+        "Unknown or unparseable LLM response returns a user-friendly error, not a stack trace"
+      ]
+    },
+    {
+      "id": "task-005",
+      "title": "Update MCP server to import from shared/db.ts",
+      "type": "backend",
+      "description": "Refactor mcp/src/index.ts to import query functions from shared/db.ts instead of containing its own SQL queries. The MCP tool handlers should call the shared functions and format the results for MCP responses. All 6 tools must continue to work identically. Must run after task-001 and after the mcp-server sprint is complete.",
+      "acceptanceCriteria": [
+        "mcp/src/index.ts imports from ../shared/db.ts or equivalent path",
+        "No SQL query strings remain in mcp/src/index.ts — all queries come from shared functions",
+        "get_flybys('Enceladus') still returns exactly 23 results through the MCP server",
+        "get_team_stats() still returns teams sorted by count descending through the MCP server",
+        "bun run dev from mcp/ still starts without error",
+        "All existing MCP tool behavior is preserved with no regressions"
+      ]
+    }
+  ]
+}
