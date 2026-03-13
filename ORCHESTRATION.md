@@ -71,16 +71,17 @@ Each step is either **agentic** (a Claude subprocess does it) or **deterministic
 The `agentloop` CLI (in `loop/`) is the execution engine. Run it from the project root:
 
 ```bash
-cd loop && bun dev         # dev mode
+cd loop && bun dev -- --prd <sprint-name>         # dev mode
 # or
-agentloop                  # compiled binary
-agentloop --resume         # resume a previous run
-agentloop --branch <name>  # specify feature branch
+agentloop --prd <sprint-name>                      # compiled binary
+agentloop --prd <sprint-name> --resume             # resume a previous run
+agentloop --prd <sprint-name> --branch <name>      # specify feature branch
+agentloop --prd <sprint-name> --yes                # skip plan confirmation
 ```
 
 ### What agentloop does
 
-1. Reads the PRD from the project (see `loop/src/lib/prd.ts` for the expected format)
+1. Reads the PRD from `docs/prds/<sprint-name>.json` (see `loop/src/lib/prd.ts` for the expected format)
 2. Calls `claude -p` with no tools to produce a dependency graph and wave order
 3. Presents the execution plan for human approval (with optional feedback loop)
 4. Executes waves in sequence; tasks within a wave run in parallel
@@ -243,6 +244,7 @@ A final **report** is posted as a comment on the epic GitHub issue summarizing:
 | Artifact | Location | Created by |
 |----------|----------|------------|
 | Plan document | `/docs/plans/<feature>.md` | Brainstorming |
+| PRD | `/docs/prds/<sprint>.json` | Brainstorming |
 | Verification scripts | `.claude/verify/<feature>/<task-id>.sh` | Brainstorming |
 | Task→issue mapping | `.claude/task-issues.json` | Brainstorming |
 | Epic issue | GitHub | Brainstorming |

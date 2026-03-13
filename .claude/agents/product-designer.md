@@ -24,8 +24,8 @@ You do not write code. You do not create GitHub issues. You make sure what gets 
    - Decisions already made and why
    - Tasks broken into units a single agent can complete in one session
    - Acceptance criteria that are specific and verifiable
-4. **Write `prd.json`** matching the schema in `loop/src/lib/prd.ts`:
-   - `sprint`: kebab-case feature name
+4. **Write `docs/prds/<sprint-name>.json`** matching the schema in `loop/src/lib/prd.ts`:
+   - `sprint`: kebab-case feature name (must match the filename)
    - `description`: one sentence
    - `tasks[]`: each with `id`, `title`, `type` (backend/frontend/both), `description`, `acceptanceCriteria[]`
 5. **Task design rules:**
